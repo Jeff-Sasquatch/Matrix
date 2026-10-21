@@ -78,7 +78,8 @@ def main(src, dst):
         tds = [f'<td class="c nw">{cell_html(ws.cell(r, 2))}</td>', f"<td>{cell_html(ws.cell(r, 3))}</td>"]
         for col, cls in ((4, "gc"), (5, "gc"), (6, "ow"), (7, "ow")):
             val = str(ws.cell(r, col).value or "").strip().upper()
-            tds.append(f'<td class="c x {cls}">X</td>' if val == "X" else '<td class="c x"></td>')
+            on = val == "X"
+            tds.append(f'<td class="c x tog{" " + cls if on else ""}" data-t="{cls}">{"X" if on else ""}</td>')
         tds.append(f'<td class="c">{cell_html(ws.cell(r, 8))}</td>')
         tds.append(f'<td class="notes">{cell_html(ws.cell(r, 9))}</td>')
         sub = str(ws.cell(r, 10).value or "").strip().upper()
@@ -139,6 +140,13 @@ TEMPLATE = """<!DOCTYPE html>
   tbody tr:not(.div):not(.blank):hover td {{ outline: 1px solid #548235; outline-offset: -1px; }}
   .notes {{ line-height: 1.35; }}
   .foot {{ text-align: center; font-size: 11px; margin-top: 16px; }}
+  td.tog {{ cursor: pointer; user-select: none; }}
+  td.tog:hover {{ box-shadow: inset 0 0 0 2px #548235; }}
+  .tools {{ display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; margin: 0 0 6px; }}
+  .tools button {{ font: inherit; padding: 3px 10px; border: 1px solid #548235; background: #fff; color: #385723; border-radius: 3px; cursor: pointer; }}
+  .tools button:hover {{ background: var(--sect); }}
+  #changed {{ color: #555; font-style: italic; }}
+  @media print {{ .tools {{ display: none; }} }}
   @media print {{
     .page {{ max-width: none; padding: 0; }}
     .scroll {{ overflow: visible; }}
@@ -156,6 +164,10 @@ TEMPLATE = """<!DOCTYPE html>
     <div class="corp">McCoy Corporation<br><b>Store Development Dept.</b><br>1350 IH 35 North<br>San Marcos, Texas 78667<br>(512) 395-6644</div>
   </div>
   <div class="updated">{updated}</div>
+  <div class="tools">
+    <span>Click a GC or Owner cell to add or remove an X. <span id="changed"></span></span>
+    <button type="button" id="reset">Reset to original</button>
+  </div>
   <div class="scroll">
   <table>
     <colgroup>
@@ -186,6 +198,41 @@ TEMPLATE = """<!DOCTYPE html>
   </table>
   </div>
 </div>
+<script>
+(function () {{
+  var KEY = "matrix-x-" + document.querySelector(".updated").textContent.replace(/\\s+/g, " ").trim();
+  var cells = Array.prototype.slice.call(document.querySelectorAll("td.tog"));
+  var original = cells.map(function (c) {{ return c.textContent === "X"; }});
+  var changes = {{}};
+  try {{ changes = JSON.parse(localStorage.getItem(KEY)) || {{}}; }} catch (e) {{ changes = {{}}; }}
+
+  function set(c, on) {{
+    c.textContent = on ? "X" : "";
+    c.classList.toggle(c.dataset.t, on);
+  }}
+  function save() {{
+    var n = Object.keys(changes).length;
+    document.getElementById("changed").textContent = n ? "(" + n + " cell" + (n > 1 ? "s" : "") + " changed from the original)" : "";
+    try {{ n ? localStorage.setItem(KEY, JSON.stringify(changes)) : localStorage.removeItem(KEY); }} catch (e) {{}}
+  }}
+
+  cells.forEach(function (c, i) {{
+    if (i in changes) set(c, changes[i]);
+    c.addEventListener("click", function () {{
+      var on = c.textContent !== "X";
+      set(c, on);
+      if (on === original[i]) delete changes[i]; else changes[i] = on;
+      save();
+    }});
+  }});
+  document.getElementById("reset").addEventListener("click", function () {{
+    cells.forEach(function (c, i) {{ set(c, original[i]); }});
+    changes = {{}};
+    save();
+  }});
+  save();
+}})();
+</script>
 </body>
 </html>
 """
