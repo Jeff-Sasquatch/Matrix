@@ -75,16 +75,19 @@ def main(src, dst):
         if re.fullmatch(r"\d{1,2}", code):
             rows.append(f'<tr class="div"><td class="c">{int(code):02d}</td><td colspan="8">{html.escape(str(c).strip())}</td></tr>')
             continue
+        flags = {}
         tds = [f'<td class="c nw">{cell_html(ws.cell(r, 2))}</td>', f"<td>{cell_html(ws.cell(r, 3))}</td>"]
         for col, cls in ((4, "gc"), (5, "gc"), (6, "ow"), (7, "ow")):
             val = str(ws.cell(r, col).value or "").strip().upper()
-            on = val == "X"
-            tds.append(f'<td class="c x tog{" " + cls if on else ""}" data-t="{cls}">{"X" if on else ""}</td>')
+            flags["defg"[col - 4]] = "X" if val == "X" else ""
+            tds.append(f'<td class="c x {cls}">X</td>' if val == "X" else '<td class="c x"></td>')
         tds.append(f'<td class="c">{cell_html(ws.cell(r, 8))}</td>')
         tds.append(f'<td class="notes">{cell_html(ws.cell(r, 9))}</td>')
         sub = str(ws.cell(r, 10).value or "").strip().upper()
         tds.append('<td class="c x sub">Y</td>' if sub == "Y" else '<td class="c x"></td>')
-        rows.append("<tr>" + "".join(tds) + "</tr>")
+        vendor = " ".join(str(ws.cell(r, 8).value or "").split())
+        attrs = "".join(f' data-{k}="{v}"' for k, v in flags.items()) + f' data-h="{html.escape(vendor)}"'
+        rows.append(f'<tr class="item"{attrs}>' + "".join(tds) + "</tr>")
     # blank trailing lines, like the printed sheet
     rows += ['<tr class="blank">' + "<td></td>" * 9 + "</tr>"] * 5
 
@@ -115,7 +118,7 @@ TEMPLATE = """<!DOCTYPE html>
   .top {{ display: flex; justify-content: space-between; align-items: flex-end; }}
   .top img {{ height: 78px; display: block; }}
   .corp {{ font-family: Arial, Helvetica, sans-serif; font-size: 11px; text-align: center; line-height: 1.35; }}
-  .scroll {{ overflow-x: auto; }}
+  @media (max-width: 1150px) {{ .scroll {{ overflow-x: auto; }} }}
   table {{ border-collapse: collapse; width: 100%; min-width: 1100px; border: 2px solid var(--line); }}
   td, th {{ border: 1px solid var(--line); padding: 2px 4px; vertical-align: middle; font-weight: normal; }}
   .updated {{ text-align: center; font-weight: bold; padding: 4px 0 3px; }}
@@ -137,22 +140,23 @@ TEMPLATE = """<!DOCTYPE html>
   td.sub {{ background: var(--sub); }}
   tr.div td {{ background: var(--sect); font-weight: bold; }}
   tr.blank td {{ height: 18px; }}
+  tr.filters th {{ background: #f3f7ef; padding: 3px 2px; position: sticky; z-index: 1; }}
+  tr.filters select {{ width: 100%; font: inherit; font-size: 12px; padding: 1px; border: 1px solid #8aa66f; border-radius: 2px; background: #fff; }}
+  tr.filters select.on {{ background: #FFF2CC; border-color: #548235; font-weight: bold; }}
+  tr.filters .info {{ font-size: 12px; text-align: left; white-space: nowrap; }}
+  tr.filters button {{ font: inherit; font-size: 12px; margin-left: 8px; padding: 1px 8px; border: 1px solid #548235; background: #fff; color: #385723; border-radius: 3px; cursor: pointer; }}
+  tr.filters button:disabled {{ opacity: .4; cursor: default; }}
+  tr.hide {{ display: none; }}
   tbody tr:not(.div):not(.blank):hover td {{ outline: 1px solid #548235; outline-offset: -1px; }}
   .notes {{ line-height: 1.35; }}
   .foot {{ text-align: center; font-size: 11px; margin-top: 16px; }}
-  td.tog {{ cursor: pointer; user-select: none; }}
-  td.tog:hover {{ box-shadow: inset 0 0 0 2px #548235; }}
-  .tools {{ display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; margin: 0 0 6px; }}
-  .tools button {{ font: inherit; padding: 3px 10px; border: 1px solid #548235; background: #fff; color: #385723; border-radius: 3px; cursor: pointer; }}
-  .tools button:hover {{ background: var(--sect); }}
-  #changed {{ color: #555; font-style: italic; }}
-  @media print {{ .tools {{ display: none; }} }}
   @media print {{
     .page {{ max-width: none; padding: 0; }}
     .scroll {{ overflow: visible; }}
     table {{ min-width: 0; font-size: 9px; }}
     thead tr.h th {{ position: static; }}
     tr {{ break-inside: avoid; }}
+    tr.filters {{ display: none; }}
     * {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
   }}
 </style>
@@ -164,15 +168,11 @@ TEMPLATE = """<!DOCTYPE html>
     <div class="corp">McCoy Corporation<br><b>Store Development Dept.</b><br>1350 IH 35 North<br>San Marcos, Texas 78667<br>(512) 395-6644</div>
   </div>
   <div class="updated">{updated}</div>
-  <div class="tools">
-    <span>Click a GC or Owner cell to add or remove an X. <span id="changed"></span></span>
-    <button type="button" id="reset">Reset to original</button>
-  </div>
   <div class="scroll">
   <table>
     <colgroup>
       <col style="width:66px"><col style="width:24%"><col><col><col><col>
-      <col style="width:120px"><col style="width:46%"><col style="width:66px">
+      <col style="width:145px"><col style="width:46%"><col style="width:66px">
     </colgroup>
     <thead>
       <tr class="banner"><th colspan="9">{title}</th></tr>
@@ -191,6 +191,17 @@ TEMPLATE = """<!DOCTYPE html>
         <th class="owh">Furnish</th><th class="owh">Install</th>
         <th class="subh">Required</th>
       </tr>
+      <tr class="filters">
+        <th></th>
+        <th class="info" style="text-align:right">Filter:</th>
+        <th><select data-col="d" aria-label="Filter GC Furnish"><option value="">All</option><option value="X">X</option><option value="-">Blank</option></select></th>
+        <th><select data-col="e" aria-label="Filter GC Install"><option value="">All</option><option value="X">X</option><option value="-">Blank</option></select></th>
+        <th><select data-col="f" aria-label="Filter Owner Furnish"><option value="">All</option><option value="X">X</option><option value="-">Blank</option></select></th>
+        <th><select data-col="g" aria-label="Filter Owner Install"><option value="">All</option><option value="X">X</option><option value="-">Blank</option></select></th>
+        <th><select data-col="h" id="vendor" aria-label="Filter Vendor/Supplier"><option value="">All</option><option value="-">Blank</option></select></th>
+        <th class="info"><span id="count"></span><button type="button" id="clear" disabled>Clear filters</button></th>
+        <th></th>
+      </tr>
     </thead>
     <tbody>
 {rows}
@@ -200,37 +211,55 @@ TEMPLATE = """<!DOCTYPE html>
 </div>
 <script>
 (function () {{
-  var KEY = "matrix-x-" + document.querySelector(".updated").textContent.replace(/\\s+/g, " ").trim();
-  var cells = Array.prototype.slice.call(document.querySelectorAll("td.tog"));
-  var original = cells.map(function (c) {{ return c.textContent === "X"; }});
-  var changes = {{}};
-  try {{ changes = JSON.parse(localStorage.getItem(KEY)) || {{}}; }} catch (e) {{ changes = {{}}; }}
+  var items = Array.prototype.slice.call(document.querySelectorAll("tbody tr.item"));
+  var rows = Array.prototype.slice.call(document.querySelectorAll("tbody tr"));
+  var selects = Array.prototype.slice.call(document.querySelectorAll("tr.filters select"));
+  var count = document.getElementById("count"), clear = document.getElementById("clear");
 
-  function set(c, on) {{
-    c.textContent = on ? "X" : "";
-    c.classList.toggle(c.dataset.t, on);
-  }}
-  function save() {{
-    var n = Object.keys(changes).length;
-    document.getElementById("changed").textContent = n ? "(" + n + " cell" + (n > 1 ? "s" : "") + " changed from the original)" : "";
-    try {{ n ? localStorage.setItem(KEY, JSON.stringify(changes)) : localStorage.removeItem(KEY); }} catch (e) {{}}
-  }}
+  // vendor list, alphabetical
+  var vendors = {{}};
+  items.forEach(function (r) {{ if (r.dataset.h) vendors[r.dataset.h] = 1; }});
+  var vsel = document.getElementById("vendor");
+  Object.keys(vendors).sort(function (a, b) {{ return a.localeCompare(b); }}).forEach(function (v) {{
+    var o = document.createElement("option"); o.value = v; o.textContent = v; vsel.appendChild(o);
+  }});
 
-  cells.forEach(function (c, i) {{
-    if (i in changes) set(c, changes[i]);
-    c.addEventListener("click", function () {{
-      var on = c.textContent !== "X";
-      set(c, on);
-      if (on === original[i]) delete changes[i]; else changes[i] = on;
-      save();
+  function apply() {{
+    var active = selects.filter(function (s) {{ return s.value; }});
+    selects.forEach(function (s) {{ s.classList.toggle("on", !!s.value); }});
+    var shown = 0;
+    items.forEach(function (r) {{
+      var ok = active.every(function (s) {{
+        var v = r.dataset[s.dataset.col] || "";
+        return s.value === "-" ? v === "" : v === s.value;
+      }});
+      r.classList.toggle("hide", !ok);
+      if (ok) shown++;
     }});
-  }});
-  document.getElementById("reset").addEventListener("click", function () {{
-    cells.forEach(function (c, i) {{ set(c, original[i]); }});
-    changes = {{}};
-    save();
-  }});
-  save();
+    // hide division headings with nothing showing under them, and the blank lines while filtering
+    var div = null, any = false;
+    rows.forEach(function (r) {{
+      if (r.classList.contains("div")) {{ if (div) div.classList.toggle("hide", !any); div = r; any = false; }}
+      else if (r.classList.contains("item")) {{ if (!r.classList.contains("hide")) any = true; }}
+      else if (r.classList.contains("blank")) {{ r.classList.toggle("hide", active.length > 0); }}
+    }});
+    if (div) div.classList.toggle("hide", !any);
+    count.textContent = active.length ? "Showing " + shown + " of " + items.length + " items" : items.length + " items";
+    clear.disabled = !active.length;
+  }}
+  selects.forEach(function (s) {{ s.addEventListener("change", apply); }});
+  clear.addEventListener("click", function () {{ selects.forEach(function (s) {{ s.value = ""; }}); apply(); }});
+
+  // keep the header rows stacked correctly while scrolling
+  function stick() {{
+    var h1 = document.querySelector("tr.h1"), h2 = document.querySelector("tr.h2");
+    h1.querySelectorAll("th").forEach(function (th) {{ th.style.top = "0px"; }});
+    h2.querySelectorAll("th").forEach(function (th) {{ th.style.top = (h1.offsetHeight) + "px"; }});
+    document.querySelectorAll("tr.filters th").forEach(function (th) {{ th.style.top = (h1.offsetHeight + h2.offsetHeight) + "px"; }});
+  }}
+  window.addEventListener("resize", stick);
+  stick();
+  apply();
 }})();
 </script>
 </body>
