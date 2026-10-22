@@ -147,6 +147,18 @@ TEMPLATE = """<!DOCTYPE html>
   tr.filters button {{ font: inherit; font-size: 12px; margin-left: 8px; padding: 1px 8px; border: 1px solid #548235; background: #fff; color: #385723; border-radius: 3px; cursor: pointer; }}
   tr.filters button:disabled {{ opacity: .4; cursor: default; }}
   tr.hide {{ display: none; }}
+  .ms {{ position: relative; }}
+  .ms-btn {{ width: 100%; margin: 0 !important; text-align: left; font-weight: normal; color: #000 !important; border: 1px solid #8aa66f !important; border-radius: 2px !important; padding: 1px 16px 1px 4px !important; background: #fff !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative; }}
+  .ms-btn::after {{ content: "▾"; position: absolute; right: 4px; top: 0; }}
+  .ms-btn.on {{ background: #FFF2CC !important; border-color: #548235 !important; font-weight: bold; }}
+  .ms-panel {{ position: absolute; top: calc(100% + 2px); left: 0; z-index: 5; width: 250px; background: #fff; border: 1px solid #548235; border-radius: 3px; box-shadow: 0 4px 14px rgba(0,0,0,.18); text-align: left; font-weight: normal; }}
+  .ms-actions {{ display: flex; justify-content: space-between; padding: 5px 6px; border-bottom: 1px solid #d6e4c8; background: #f3f7ef; }}
+  .ms-actions button {{ margin: 0 !important; }}
+  .ms-list {{ max-height: 320px; overflow-y: auto; padding: 3px 0; }}
+  .ms-list label {{ display: flex; align-items: center; gap: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; white-space: normal; }}
+  .ms-list label:hover {{ background: #E2EFDA; }}
+  .ms-list label.sep {{ border-bottom: 1px solid #e3e3e3; font-style: italic; }}
+  .ms-list input {{ margin: 0; accent-color: #548235; }}
   tbody tr:not(.div):not(.blank):hover td {{ outline: 1px solid #548235; outline-offset: -1px; }}
   .notes {{ line-height: 1.35; }}
   .foot {{ text-align: center; font-size: 11px; margin-top: 16px; }}
@@ -198,7 +210,7 @@ TEMPLATE = """<!DOCTYPE html>
         <th><select data-col="e" aria-label="Filter GC Install"><option value="">All</option><option value="X">X</option><option value="-">Blank</option></select></th>
         <th><select data-col="f" aria-label="Filter Owner Furnish"><option value="">All</option><option value="X">X</option><option value="-">Blank</option></select></th>
         <th><select data-col="g" aria-label="Filter Owner Install"><option value="">All</option><option value="X">X</option><option value="-">Blank</option></select></th>
-        <th><select data-col="h" id="vendor" aria-label="Filter Vendor/Supplier"><option value="">All</option><option value="-">Blank</option></select></th>
+        <th><div class="ms" id="vendor"><button type="button" class="ms-btn" aria-haspopup="true" aria-expanded="false" aria-label="Filter Vendor/Supplier">All</button><div class="ms-panel" hidden><div class="ms-actions"><button type="button" data-act="all">Select all</button><button type="button" data-act="none">Clear</button></div><div class="ms-list"></div></div></div></th>
         <th class="info"><span id="count"></span><button type="button" id="clear" disabled>Clear filters</button></th>
         <th></th>
       </tr>
@@ -219,20 +231,41 @@ TEMPLATE = """<!DOCTYPE html>
   // vendor list, alphabetical
   var vendors = {{}};
   items.forEach(function (r) {{ if (r.dataset.h) vendors[r.dataset.h] = 1; }});
-  var vsel = document.getElementById("vendor");
-  Object.keys(vendors).sort(function (a, b) {{ return a.localeCompare(b); }}).forEach(function (v) {{
-    var o = document.createElement("option"); o.value = v; o.textContent = v; vsel.appendChild(o);
-  }});
+  var ms = document.getElementById("vendor"), msBtn = ms.querySelector(".ms-btn"),
+      msPanel = ms.querySelector(".ms-panel"), msList = ms.querySelector(".ms-list");
+  function addBox(value, text, cls) {{
+    var l = document.createElement("label"); if (cls) l.className = cls;
+    var cb = document.createElement("input"); cb.type = "checkbox"; cb.value = value;
+    l.appendChild(cb); l.appendChild(document.createTextNode(text)); msList.appendChild(l);
+  }}
+  addBox("-", "(Blank – no vendor listed)", "sep");
+  Object.keys(vendors).sort(function (a, b) {{ return a.localeCompare(b); }}).forEach(function (v) {{ addBox(v, v); }});
+  var boxes = Array.prototype.slice.call(msList.querySelectorAll("input"));
+  function picked() {{ return boxes.filter(function (b) {{ return b.checked; }}).map(function (b) {{ return b.value; }}); }}
+  function openPanel(open) {{ msPanel.hidden = !open; msBtn.setAttribute("aria-expanded", open); }}
+  msBtn.addEventListener("click", function (e) {{ e.stopPropagation(); openPanel(msPanel.hidden); }});
+  msPanel.addEventListener("click", function (e) {{ e.stopPropagation(); }});
+  document.addEventListener("click", function () {{ openPanel(false); }});
+  document.addEventListener("keydown", function (e) {{ if (e.key === "Escape") openPanel(false); }});
+  msList.addEventListener("change", apply);
+  ms.querySelector("[data-act=all]").addEventListener("click", function () {{ boxes.forEach(function (b) {{ b.checked = true; }}); apply(); }});
+  ms.querySelector("[data-act=none]").addEventListener("click", function () {{ boxes.forEach(function (b) {{ b.checked = false; }}); apply(); }});
 
   function apply() {{
     var active = selects.filter(function (s) {{ return s.value; }});
     selects.forEach(function (s) {{ s.classList.toggle("on", !!s.value); }});
+    // vendor checklist: nothing ticked (or everything ticked) = no vendor filter
+    var vp = picked(), vOn = vp.length > 0 && vp.length < boxes.length;
+    msBtn.classList.toggle("on", vOn);
+    msBtn.textContent = !vOn ? "All" : vp.length === 1 ? (vp[0] === "-" ? "(Blank)" : vp[0]) : vp.length + " selected";
+    msBtn.title = vOn ? vp.map(function (v) {{ return v === "-" ? "(Blank)" : v; }}).join(", ") : "";
+    var nActive = active.length + (vOn ? 1 : 0);
     var shown = 0;
     items.forEach(function (r) {{
       var ok = active.every(function (s) {{
         var v = r.dataset[s.dataset.col] || "";
         return s.value === "-" ? v === "" : v === s.value;
-      }});
+      }}) && (!vOn || vp.indexOf(r.dataset.h || "-") !== -1);
       r.classList.toggle("hide", !ok);
       if (ok) shown++;
     }});
@@ -241,14 +274,14 @@ TEMPLATE = """<!DOCTYPE html>
     rows.forEach(function (r) {{
       if (r.classList.contains("div")) {{ if (div) div.classList.toggle("hide", !any); div = r; any = false; }}
       else if (r.classList.contains("item")) {{ if (!r.classList.contains("hide")) any = true; }}
-      else if (r.classList.contains("blank")) {{ r.classList.toggle("hide", active.length > 0); }}
+      else if (r.classList.contains("blank")) {{ r.classList.toggle("hide", nActive > 0); }}
     }});
     if (div) div.classList.toggle("hide", !any);
-    count.textContent = active.length ? "Showing " + shown + " of " + items.length + " items" : items.length + " items";
-    clear.disabled = !active.length;
+    count.textContent = nActive ? "Showing " + shown + " of " + items.length + " items" : items.length + " items";
+    clear.disabled = !nActive;
   }}
   selects.forEach(function (s) {{ s.addEventListener("change", apply); }});
-  clear.addEventListener("click", function () {{ selects.forEach(function (s) {{ s.value = ""; }}); apply(); }});
+  clear.addEventListener("click", function () {{ selects.forEach(function (s) {{ s.value = ""; }}); boxes.forEach(function (b) {{ b.checked = false; }}); apply(); }});
 
   // keep the header rows stacked correctly while scrolling
   function stick() {{
