@@ -110,7 +110,7 @@ TEMPLATE = """<!DOCTYPE html>
 <style>
   :root {{
     --green: #00573D; --sect: #E2EFDA; --gc: #FFE699; --owner: #A9D08E;
-    --sub: #B4C6E7; --yellow: #FFFF00; --line: #000;
+    --sub: #B4C6E7; --yellow: #FFEA00; --line: #000;
   }}
   * {{ box-sizing: border-box; }}
   body {{ margin: 0; background: #fff; color: #000; font-family: "Times New Roman", Times, serif; font-size: 13px; }}
