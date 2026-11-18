@@ -142,14 +142,15 @@ TEMPLATE = """<!DOCTYPE html>
   .top {{ display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 12px; background: var(--green); color: var(--yellow); border: 2px solid var(--line); border-bottom: 0; padding: 10px 40px 6px; }}
   .top img {{ height: 78px; display: block; }}
   .corp {{ font-family: Arial, Helvetica, sans-serif; font-size: 11px; text-align: center; line-height: 1.35; justify-self: end; align-self: center; }}
-  @media (max-width: 640px) {{ .top {{ grid-template-columns: 1fr; justify-items: center; padding: 10px 16px 6px; }} .top .corp {{ justify-self: center; }} .top .updated {{ order: 3; }} }}
+  @media (max-width: 640px) {{ .top {{ grid-template-columns: 1fr; justify-items: center; padding: 10px 16px 6px; }} .top .corp {{ justify-self: center; }} .top .mid {{ order: 3; }} }}
   @media (max-width: 1150px) {{ .scroll {{ overflow-x: auto; }} }}
   table {{ border-collapse: collapse; width: 100%; min-width: 1100px; border: 2px solid var(--line); }}
   td, th {{ border: 1px solid var(--line); padding: 2px 4px; vertical-align: middle; font-weight: normal; }}
+  .mid {{ display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 10px; align-self: stretch; text-align: center; }}
+  .mid .title {{ font-weight: bold; font-size: 20px; line-height: 1.3; margin: auto 0; }}
   .updated {{ text-align: center; font-weight: bold; padding: 0; white-space: nowrap; }}
   .red {{ color: #FF0000; }}
   .updated .red {{ color: #FF0000; }}
-  .banner th {{ background: var(--green); color: var(--yellow); font-weight: bold; font-size: 17px; padding: 6px; border-bottom: 2px solid var(--line); }}
   .store td {{ text-align: center; padding: 5px; line-height: 1.4; background: var(--green); color: var(--yellow); }}
   thead tr.h th {{ background: var(--green); color: var(--yellow); text-align: center; position: sticky; z-index: 1; }}
   thead tr.h1 th {{ top: 0; }}
@@ -202,7 +203,10 @@ TEMPLATE = """<!DOCTYPE html>
 <div class="page">
   <div class="top">
     <div>{logo}</div>
-    <div class="updated">{updated}</div>
+    <div class="mid">
+      <div class="title">{title}</div>
+      <div class="updated">{updated}</div>
+    </div>
     <div class="corp">McCoy Corporation<br><b>Store Development Dept.</b><br>1350 IH 35 North<br>San Marcos, Texas 78667<br>(512) 395-6644</div>
   </div>
   <div class="scroll">
@@ -212,7 +216,6 @@ TEMPLATE = """<!DOCTYPE html>
       <col style="width:145px"><col style="width:46%"><col style="width:66px">
     </colgroup>
     <thead>
-      <tr class="banner"><th colspan="9">{title}</th></tr>
       <tr class="store"><td colspan="9">{store}</td></tr>
       <tr class="h h1">
         <th rowspan="2">CSI<br>Division</th>
