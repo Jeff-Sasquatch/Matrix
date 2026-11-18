@@ -3,7 +3,7 @@
 Usage:  python build_matrix.py <workbook.xlsx> [output.html]
 Re-run whenever the Excel file is updated.
 """
-import base64, html, re, sys, zipfile
+import base64, html, io, re, sys, zipfile
 import openpyxl
 from openpyxl.cell.rich_text import CellRichText, TextBlock
 
@@ -47,6 +47,25 @@ def cell_html(cell):
     return span(str(v).strip(), False, is_red(base), bool(base.strike))
 
 
+def yellow_tagline(data, color=(0xFF, 0xEA, 0x00)):
+    """Recolor the "Go Build Something" tagline under the logo badge to McCoy's yellow."""
+    from PIL import Image
+    im = Image.open(io.BytesIO(data)).convert("RGBA")
+    w, h = im.size
+    px = im.load()
+    filled = [any(px[x, y][3] > 0 for x in range(w)) for y in range(h)]
+    # the tagline starts after the first blank row gap below the badge
+    gap = next(y for y in range(h // 2, h) if not filled[y])
+    for y in range(gap, h):
+        for x in range(w):
+            a = px[x, y][3]
+            if a:
+                px[x, y] = color + (a,)
+    out = io.BytesIO()
+    im.save(out, "PNG", optimize=True)
+    return out.getvalue()
+
+
 def main(src, dst):
     wb = openpyxl.load_workbook(src, rich_text=True)
     ws = wb.active
@@ -57,7 +76,12 @@ def main(src, dst):
         imgs = [n for n in z.namelist() if n.startswith("xl/media/")]
         if imgs:
             ext = imgs[0].rsplit(".", 1)[-1].lower()
-            logo = f"data:image/{'jpeg' if ext in ('jpg','jpeg') else ext};base64," + base64.b64encode(z.read(imgs[0])).decode()
+            data = z.read(imgs[0])
+            try:
+                data, ext = yellow_tagline(data), "png"
+            except Exception as e:  # keep the original logo if recoloring fails
+                print("logo recolor skipped:", e)
+            logo = f"data:image/{'jpeg' if ext in ('jpg','jpeg') else ext};base64," + base64.b64encode(data).decode()
 
     updated = cell_html(ws["C5"])
     title = cell_html(ws["B6"])
@@ -115,17 +139,18 @@ TEMPLATE = """<!DOCTYPE html>
   * {{ box-sizing: border-box; }}
   body {{ margin: 0; background: #fff; color: #000; font-family: "Times New Roman", Times, serif; font-size: 13px; }}
   .page {{ max-width: 1400px; margin: 0 auto; padding: 24px 16px 48px; }}
-  .top {{ display: flex; justify-content: space-between; align-items: flex-end; }}
+  .top {{ display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 12px; background: var(--green); color: var(--yellow); border: 2px solid var(--line); border-bottom: 0; padding: 10px 40px 6px; }}
   .top img {{ height: 78px; display: block; }}
-  .corp {{ font-family: Arial, Helvetica, sans-serif; font-size: 11px; text-align: center; line-height: 1.35; }}
+  .corp {{ font-family: Arial, Helvetica, sans-serif; font-size: 11px; text-align: center; line-height: 1.35; justify-self: end; align-self: center; }}
+  @media (max-width: 640px) {{ .top {{ grid-template-columns: 1fr; justify-items: center; padding: 10px 16px 6px; }} .top .corp {{ justify-self: center; }} .top .updated {{ order: 3; }} }}
   @media (max-width: 1150px) {{ .scroll {{ overflow-x: auto; }} }}
   table {{ border-collapse: collapse; width: 100%; min-width: 1100px; border: 2px solid var(--line); }}
   td, th {{ border: 1px solid var(--line); padding: 2px 4px; vertical-align: middle; font-weight: normal; }}
-  .updated {{ text-align: center; font-weight: bold; padding: 4px 0 3px; }}
+  .updated {{ text-align: center; font-weight: bold; padding: 0; white-space: nowrap; }}
   .red {{ color: #FF0000; }}
   .updated .red {{ color: #FF0000; }}
   .banner th {{ background: var(--green); color: var(--yellow); font-weight: bold; font-size: 17px; padding: 6px; border-bottom: 2px solid var(--line); }}
-  .store td {{ text-align: center; padding: 5px; line-height: 1.4; }}
+  .store td {{ text-align: center; padding: 5px; line-height: 1.4; background: var(--green); color: var(--yellow); }}
   thead tr.h th {{ background: var(--green); color: var(--yellow); text-align: center; position: sticky; z-index: 1; }}
   thead tr.h1 th {{ top: 0; }}
   thead tr.h2 th {{ top: 22px; }}
@@ -177,9 +202,9 @@ TEMPLATE = """<!DOCTYPE html>
 <div class="page">
   <div class="top">
     <div>{logo}</div>
+    <div class="updated">{updated}</div>
     <div class="corp">McCoy Corporation<br><b>Store Development Dept.</b><br>1350 IH 35 North<br>San Marcos, Texas 78667<br>(512) 395-6644</div>
   </div>
-  <div class="updated">{updated}</div>
   <div class="scroll">
   <table>
     <colgroup>
